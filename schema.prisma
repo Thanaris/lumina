@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Restaurant {
+  id          String @id @default(cuid())
+  name        String @default("Trattoria del Sole")
+  address     String @default("Via Etnea 142, Catania")
+  phone       String @default("+39 095 123 4567")
+  email       String @default("info@trattoriadsole.it")
+  instagram   String @default("@trattoriadsole")
+  tiktok      String @default("@trattoriadsole")
+  description String @default("Cucina siciliana autentica dal 1987")
+  logoUrl     String @default("")
+  coverUrl    String @default("")
+  tables      Int    @default(12)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  menuItems    MenuItem[]
+  orders       Order[]
+  reviews      Review[]
+  reservations Reservation[]
+  socialPosts  SocialPost[]
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  price       Float
+  category    String   @default("Primi")
+  available   Boolean  @default(true)
+  allergens   String   @default("")
+  imageEmoji  String   @default("🍝")
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  orderItems   OrderItem[]
+}
+
+model Order {
+  id          String   @id @default(cuid())
+  customerName String  @default("Cliente WhatsApp")
+  customerPhone String @default("")
+  status      String   @default("nuovo") // nuovo, in_cucina, pronto, consegnato, annullato
+  total       Float    @default(0)
+  notes       String   @default("")
+  source      String   @default("whatsapp")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  items        OrderItem[]
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  quantity    Int      @default(1)
+  notes       String   @default("")
+  price       Float
+
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id])
+
+  menuItemId  String
+  menuItem    MenuItem  @relation(fields: [menuItemId], references: [id])
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  platform    String   // google, tripadvisor, thefork
+  author      String
+  rating      Int
+  text        String
+  date        String
+  replied     Boolean  @default(false)
+  replyText   String   @default("")
+  replyDate   String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+}
+
+model SocialPost {
+  id          String   @id @default(cuid())
+  platform    String   // instagram, tiktok, facebook
+  type        String   // foto, video, storia, reel
+  caption     String
+  scheduledAt String   @default("")
+  status      String   @default("bozza") // bozza, programmato, pubblicato, fallito
+  aiSuggestion Boolean @default(true)
+  hashtags    String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+}
+
+model Reservation {
+  id          String   @id @default(cuid())
+  customerName String
+  customerPhone String
+  date        String
+  time        String
+  guests      Int
+  notes       String   @default("")
+  status      String   @default("confermata") // confermata, in_attesa, completata, annullata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+}
