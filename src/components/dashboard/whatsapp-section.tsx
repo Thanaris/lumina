@@ -108,7 +108,6 @@ export default function WhatsAppSection() {
     const savedMsg = customerMsg;
     setCustomerMsg("");
 
-    // Send to AI
     setSending(true);
     try {
       const conv = conversations.find((c) => c.id === activeConv);
@@ -129,6 +128,10 @@ export default function WhatsAppSection() {
       });
 
       const data = await res.json();
+
+      if (data.error) {
+        toast.error(data.debug || data.error);
+      }
 
       const aiMsg: ChatMessage = {
         id: `msg_${Date.now()}_ai`,
@@ -247,7 +250,6 @@ export default function WhatsAppSection() {
     }
   }
 
-  // Demo: simulate a customer starting a chat
   function startDemo() {
     const conv = createConversation("+39 333 456 7890", "Giuseppe Russo");
     const demoMessages: ChatMessage[] = [
@@ -263,7 +265,6 @@ export default function WhatsAppSection() {
 
   return (
     <div className="flex gap-4 h-[calc(100vh-140px)]">
-      {/* Conversations List */}
       <Card className="w-72 shrink-0 flex flex-col">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -347,7 +348,6 @@ export default function WhatsAppSection() {
         </CardContent>
       </Card>
 
-      {/* Chat Area */}
       <Card className="flex-1 flex flex-col">
         {activeConversation ? (
           <>
@@ -371,11 +371,10 @@ export default function WhatsAppSection() {
               </div>
             </CardHeader>
 
-            {/* Messages */}
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
               <div className="text-center">
                 <span className="text-[10px] bg-muted px-3 py-1 rounded-full text-muted-foreground">
-                  Chat di simulazione — il cliente scrive qui sotto
+                  Chat di simulazione
                 </span>
               </div>
 
@@ -445,7 +444,6 @@ export default function WhatsAppSection() {
               )}
             </div>
 
-            {/* Customer Input (simulation) */}
             <div className="border-t p-3">
               <p className="text-[10px] text-muted-foreground mb-2 flex items-center gap-1">
                 <MessageSquare className="h-3 w-3" />
