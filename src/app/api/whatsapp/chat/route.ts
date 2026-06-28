@@ -10,10 +10,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
 
-    // Parse the message with AI
     const result = await parseCustomerMessage(message, conversationHistory || []);
 
-    // If it's an order, create it in the database
     let createdOrderId = null;
     if (result.isOrder && result.items.length > 0) {
       const order = await db.order.create({
@@ -46,8 +44,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error processing WhatsApp chat:", error);
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: "Failed to process message", reply: "Mi scusi, c'è stato un problema. Riprova tra poco!" },
+      { error: "Failed to process message", reply: "Mi scusi, c'è stato un problema. Riprova tra poco!", debug: errorMsg },
       { status: 500 }
     );
   }
