@@ -1,88 +1,77 @@
 import { NextRequest, NextResponse } from "next/server";
 
-async function callGroq(systemPrompt: string, userMessage: string): Promise<string> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) throw new Error("GROQ_API_KEY non configurata");
-
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      temperature: 0.8,
-      response_format: { type: "json_object" },
-    }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Groq API error ${res.status}: ${errText}`);
-  }
-
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || "";
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const { platform, type } = await request.json();
+    const { type, context } = await request.json();
 
-    if (!platform || !type) {
-      return NextResponse.json({ error: "platform and type are required" }, { status: 400 });
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: "GROQ_API_KEY non configurata" }, { status: 500 });
     }
 
-    const platformInstructions: Record<string, string> = {
-      instagram: "Il post e per Instagram. Tono visivo e coinvolgente con emoji.",
-      tiktok: "Il post e per TikTok. Tono giovane e dinamico.",
-      facebook: "Il post e per Facebook. Tono familiare e accogliente.",
-    };
+    let systemPrompt = "";
+    let userPrompt = "";
 
-    const typeInstructions: Record<string, string> = {
-      foto: "E una foto di un piatto. Descrivi in modo appetitoso.",
-      video: "E un video del ristorante. Testo che invita a guardare.",
-      storia: "E una story. Testo breve, massimo 2 frasi.",
-      reel: "E un reel. Tono accattivante e virale.",
-    };
+    if (type === "weekly_ideas") {
+      systemPrompt = `Sei un content creator esperto per ristoranti italiani. Genera esattamente 3 idee post per la prossima settimana.
+Ogni idea deve avere:
+- giorno (lunedi, martedi, mercoledi, giovedi, venerdi, sabato, domenica)
+- piattaforma (instagram, facebook, o entrambi)
+- tipo_contenuto: "foto_piatto", "story_interattiva", "reel_cucina", "dietro_le_quinte", "promo speciale", "recensione_cliente", "consiglio_sommelier", "evento"
+- titolo_creativo (max 8 parole, engaging)
+- caption (100-150 parole, con emoji, include hashtag)
+- hashtag (5-8 hashtag rilevanti)
+- suggerimento_visivo (cosa mostrare nella foto/video, max 30 parole)
+- orario_pubblicazione (miglior orario per pubblicare, es. "12:30")
 
-    const platformInstruction = platformInstructions[platform] || platformInstructions.instagram;
-    const typeInstruction = typeInstructions[type] || typeInstructions.foto;
+Rispondi SOLO in JSON valido con formato:
+{ "idee": [ ... ] }`;
 
-    const systemPrompt = `Sei un social media manager AI per un ristorante di cucina siciliana a Catania. Genera contenuti in italiano. Includi hashtag in italiano e inglese.`;
+      userPrompt = `Genera 3 idee post per un ristorante italiano elegante. ${context || ""}`;
+    } else if (type === "caption") {
+      systemPrompt = `Sei un content creator per un ristorante italiano elegante. Genera una caption per un post social.
+La caption deve essere:
+- 100-150 parole
+- Con emojiappropriate
+- Con 5-8 hashtag alla fine
+- Coinvolgente e autentica
 
-    const rawContent = await callGroq(systemPrompt, `Genera un post social.
-Piattaforma: ${platform}
-Tipo: ${type}
+Rispondi SOLO in JSON: { "caption": "...", "hashtag": "#..." }`;
 
- ${platformInstruction}
- ${typeInstruction}
-
-Rispondi in JSON:
-{"caption":"testo del post","hashtags":"#h1 #h2 #h3 #h4 #h5"}
-
-SOLO JSON.`);
-
-    let result;
-    try {
-      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        result = JSON.parse(jsonMatch[0]);
-      } else {
-        result = { caption: rawContent, hashtags: "#cucinasiciliana #catania #foodporn" };
-      }
-    } catch {
-      result = { caption: rawContent, hashtags: "#cucinasiciliana #catania #foodporn" };
+      userPrompt = context || "Genera una caption per un piatto speciale del ristorante";
+    } else {
+      return NextResponse.json({ error: "Tipo non valido" }, { status: 400 });
     }
 
-    return NextResponse.json(result);
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.8,
+        max_tokens: 2000,
+      }),
+    });
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error("Risposta vuota da Groq");
+    }
+
+    const parsed = JSON.parse(content);
+    return NextResponse.json(parsed);
   } catch (error) {
-    console.error("Error generating AI suggestion:", error);
-    return NextResponse.json({ error: "Failed to generate AI suggestion" }, { status: 500 });
+    console.error("AI suggest error:", error);
+    return NextResponse.json({ error: "Errore generazione contenuto" }, { status: 500 });
   }
 }
