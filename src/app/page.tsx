@@ -30,7 +30,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-lumina-black flex">
       <AppSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
-      <main className="flex-1 md:ml-64 p-4 md:p-6 lg:p-8">
+      <main className="flex-1 md:ml-64 min-w-0 p-3 sm:p-4 md:p-6 lg:p-8">
         <ActiveComponent />
       </main>
     </div>
