@@ -1,82 +1,37 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "sonner";
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
-  Star,
-  MessageSquare,
-  CheckCircle2,
-  AlertCircle,
-  Sparkles,
-  Send,
-  Filter,
-} from "lucide-react";
-import type { Review } from "@/lib/types";
+  Star, MessageSquare, Send, Check, X, Loader2, Sparkles,
+  Bell, AlertCircle, ThumbsUp, ThumbsDown, Edit3, RefreshCw
+} from 'lucide-react';
 
-type FilterTab =
-  | "tutte"
-  | "da_rispondere"
-  | "google"
-  | "tripadvisor"
-  | "thefork";
-
-const filterTabs: { key: FilterTab; label: string }[] = [
-  { key: "tutte", label: "Tutte" },
-  { key: "da_rispondere", label: "Da Rispondere" },
-  { key: "google", label: "Google" },
-  { key: "tripadvisor", label: "TripAdvisor" },
-  { key: "thefork", label: "TheFork" },
-];
-
-const platformBadgeClasses: Record<string, string> = {
-  google: "bg-blue-50 text-blue-700 border-blue-200",
-  tripadvisor: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  thefork: "bg-orange-50 text-orange-700 border-orange-200",
-};
-
-const platformLabels: Record<string, string> = {
-  google: "Google",
-  tripadvisor: "TripAdvisor",
-  thefork: "TheFork",
-};
-
-function StarRating({ rating }: { rating: number }) {
-  return (
-    <div className="flex items-center gap-0.5">
-      {Array.from({ length: 5 }, (_, i) => (
-        <Star
-          key={i}
-          className={`h-4 w-4 ${
-            i < rating
-              ? "fill-amber-400 text-amber-400"
-              : "fill-muted text-muted"
-          }`}
-        />
-      ))}
-    </div>
-  );
+interface Review {
+  id: string;
+  author: string;
+  text: string;
+  rating: number;
+  platform: string;
+  replied: boolean;
+  replyText?: string;
+  createdAt?: string;
 }
 
-function ReviewsSkeleton() {
+const platformConfig: Record<string, { label: string; color: string; icon: string }> = {
+  google: { label: 'Google', color: 'bg-blue-500/15 text-blue-300 border-blue-500/30', icon: 'G' },
+  tripadvisor: { label: 'TripAdvisor', color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', icon: 'T' },
+  thefork: { label: 'TheFork', color: 'bg-orange-500/15 text-orange-300 border-orange-500/30', icon: 'F' },
+};
+
+function StarRating({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'md' }) {
+  const cls = size === 'sm' ? 'size-3.5' : 'size-4';
   return (
-    <div className="space-y-4">
-      {Array.from({ length: 3 }, (_, i) => (
-        <Card key={i}>
-          <CardContent className="p-4 sm:p-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <Skeleton className="h-5 w-32" />
-              <Skeleton className="h-5 w-20" />
-            </div>
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-4 w-28" />
-          </CardContent>
-        </Card>
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map(star => (
+        <Star key={star} className={`${cls} ${star <= rating ? 'fill-lumina-gold text-lumina-gold' : 'text-gray-600'}`} />
       ))}
     </div>
   );
@@ -85,322 +40,261 @@ function ReviewsSkeleton() {
 export default function ReviewsSection() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState<FilterTab>("tutte");
-  const [generatingId, setGeneratingId] = useState<string | null>(null);
-  const [replyTexts, setReplyTexts] = useState<Record<string, string>>({});
-  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [generatingDraft, setGeneratingDraft] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [confirming, setConfirming] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchReviews() {
-      try {
-        const res = await fetch("/api/reviews");
-        if (!res.ok) throw new Error("Failed to fetch");
-        const data: Review[] = await res.json();
-        setReviews(data);
-      } catch {
-        toast.error("Errore nel caricamento delle recensioni");
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchReviews();
-  }, []);
-
-  const filteredReviews = reviews.filter((r) => {
-    if (activeFilter === "tutte") return true;
-    if (activeFilter === "da_rispondere") return !r.replied;
-    return r.platform === activeFilter;
-  });
-
-  const totalReviews = reviews.length;
-  const avgRating =
-    totalReviews > 0
-      ? (
-          reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews
-        ).toFixed(1)
-      : "0.0";
-  const unrepliedCount = reviews.filter((r) => !r.replied).length;
-
-  async function handleGenerateReply(review: Review) {
-    setGeneratingId(review.id);
+  const fetchReviews = async () => {
     try {
-      const res = await fetch("/api/reviews/ai-reply", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/reviews');
+      const data = await res.json();
+      setReviews(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching reviews:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchReviews(); }, []);
+
+  // Genera bozza risposta AI
+  const generateDraft = async (review: Review) => {
+    setGeneratingDraft(review.id);
+    try {
+      const res = await fetch('/api/reviews/draft-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           reviewText: review.text,
+          reviewAuthor: review.author,
           rating: review.rating,
-          author: review.author,
           platform: review.platform,
         }),
       });
-      if (!res.ok) throw new Error("Failed to generate");
-      const { reply } = await res.json();
-      setReplyTexts((prev) => ({ ...prev, [review.id]: reply }));
-      toast.success("Risposta AI generata con successo");
-    } catch {
-      toast.error("Errore nella generazione della risposta AI");
+      const data = await res.json();
+      if (data.draft) {
+        setDrafts(prev => ({ ...prev, [review.id]: data.draft }));
+      } else {
+        alert('Errore: ' + (data.error || ''));
+      }
+    } catch (err) {
+      alert('Errore di connessione');
     } finally {
-      setGeneratingId(null);
+      setGeneratingDraft(null);
     }
-  }
+  };
 
-  async function handleSendReply(review: Review) {
-    const replyText = replyTexts[review.id];
-    if (!replyText?.trim()) {
-      toast.error("La risposta non può essere vuota");
-      return;
-    }
-    setSendingId(review.id);
+  // Conferma e invia risposta
+  const confirmReply = async (reviewId: string) => {
+    const draft = drafts[reviewId];
+    if (!draft) return;
+
+    setConfirming(reviewId);
     try {
-      const res = await fetch(`/api/reviews/${review.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ replied: true, replyText }),
+      const res = await fetch('/api/reviews', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: reviewId, replyText: draft, replied: true }),
       });
-      if (!res.ok) throw new Error("Failed to save");
-      setReviews((prev) =>
-        prev.map((r) =>
-          r.id === review.id
-            ? {
-                ...r,
-                replied: true,
-                replyText,
-                replyDate: new Date().toISOString().split("T")[0],
-              }
-            : r
-        )
-      );
-      setReplyTexts((prev) => {
-        const next = { ...prev };
-        delete next[review.id];
-        return next;
-      });
-      toast.success("Risposta inviata con successo!");
-    } catch {
-      toast.error("Errore nell&apos;invio della risposta");
+      const data = await res.json();
+      if (data.success) {
+        setDrafts(prev => { const n = { ...prev }; delete n[reviewId]; return n; });
+        await fetchReviews();
+      } else {
+        alert('Errore: ' + (data.error || ''));
+      }
+    } catch (err) {
+      alert('Errore invio risposta');
     } finally {
-      setSendingId(null);
+      setConfirming(null);
     }
-  }
+  };
+
+  const unreplied = reviews.filter(r => !r.replied);
+  const replied = reviews.filter(r => r.replied);
 
   return (
-    <section className="space-y-6" aria-label="Gestione Recensioni">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">
-          Gestione Recensioni AI
+      <div className="pt-10 md:pt-0">
+        <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+          <Star className="size-5 sm:size-6 text-lumina-gold" />
+          Recensioni AI
         </h2>
-        <p className="text-muted-foreground mt-1">
-          Monitora e rispondi alle recensioni da Google, TripAdvisor e TheFork
-        </p>
+        <p className="text-sm text-lumina-muted mt-0.5">AI genera bozze, tu confermi e invii</p>
       </div>
 
-      {/* Stats Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-              <MessageSquare className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Totale Recensioni</p>
-              <p className="text-2xl font-bold">{totalReviews}</p>
-            </div>
+      {/* Statistiche veloci */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <Card className="bg-lumina-card border-lumina-border">
+          <CardContent className="p-3 sm:p-4 text-center">
+            <p className="text-2xl sm:text-3xl font-bold text-white">{reviews.length}</p>
+            <p className="text-[11px] sm:text-xs text-lumina-muted">Totale Recensioni</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-              <Star className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Media Voto</p>
-              <div className="flex items-center gap-2">
-                <p className="text-2xl font-bold">{avgRating}</p>
-                <StarRating rating={Math.round(Number(avgRating))} />
-              </div>
-            </div>
+        <Card className="bg-lumina-card border-lumina-border">
+          <CardContent className="p-3 sm:p-4 text-center">
+            <p className="text-2xl sm:text-3xl font-bold text-rose-400">{unreplied.length}</p>
+            <p className="text-[11px] sm:text-xs text-lumina-muted">Da Rispondere</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-              <AlertCircle className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Da Rispondere</p>
-              <p className="text-2xl font-bold">{unrepliedCount}</p>
-            </div>
+        <Card className="bg-lumina-card border-lumina-border col-span-2 sm:col-span-1">
+          <CardContent className="p-3 sm:p-4 text-center">
+            <p className="text-2xl sm:text-3xl font-bold text-emerald-400">{replied.length}</p>
+            <p className="text-[11px] sm:text-xs text-lumina-muted">Risposte Inviate</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-        {filterTabs.map((tab) => {
-          const isActive = activeFilter === tab.key;
-          return (
-            <Button
-              key={tab.key}
-              variant={isActive ? "default" : "outline"}
-              size="sm"
-              className="shrink-0"
-              onClick={() => setActiveFilter(tab.key)}
-            >
-              {tab.label}
-              {tab.key === "da_rispondere" && unrepliedCount > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="ml-1.5 h-5 min-w-5 px-1.5 text-xs"
-                >
-                  {unrepliedCount}
-                </Badge>
-              )}
-            </Button>
-          );
-        })}
-      </div>
-
-      {/* Review Cards */}
-      {loading ? (
-        <ReviewsSkeleton />
-      ) : filteredReviews.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            <MessageSquare className="mx-auto h-10 w-10 mb-3 opacity-40" />
-            <p className="text-lg font-medium">Nessuna recensione trovata</p>
-            <p className="text-sm mt-1">
-              Non ci sono recensioni per questo filtro.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4 max-h-[800px] overflow-y-auto pr-1">
-          {filteredReviews.map((review) => (
-            <Card key={review.id} className="transition-shadow hover:shadow-md">
-              <CardContent className="p-4 sm:p-6 space-y-3">
-                {/* Top row: author + platform */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-base">
-                      {review.author}
-                    </span>
+      {/* DA RISPONDERE - con notifica */}
+      {unreplied.length > 0 && (
+        <Card className="bg-lumina-card border-rose-500/30">
+          <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+            <CardTitle className="flex items-center gap-2 text-sm sm:text-base text-white">
+              <Bell className="size-4 sm:size-5 text-rose-400 animate-pulse" />
+              Da Rispondere ({unreplied.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-3">
+            {unreplied.map(review => {
+              const pc = platformConfig[review.platform] || platformConfig.google;
+              const hasDraft = !!drafts[review.id];
+              return (
+                <div key={review.id} className="p-3 sm:p-4 rounded-lg bg-lumina-black/50 border border-rose-500/20">
+                  {/* Intestazione */}
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <span className="font-semibold text-sm text-white">{review.author}</span>
                     <StarRating rating={review.rating} />
+                    <Badge variant="outline" className={pc.color}>{pc.label}</Badge>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={`w-fit text-xs ${platformBadgeClasses[review.platform] ?? ""}`}
-                  >
-                    {platformLabels[review.platform] ?? review.platform}
-                  </Badge>
-                </div>
 
-                {/* Review text */}
-                <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-line">
-                  {review.text}
-                </p>
+                  {/* Testo recensione */}
+                  <div className="p-2.5 rounded-lg bg-lumina-dark/50 border border-lumina-border mb-3">
+                    <p className="text-xs sm:text-sm text-gray-300 italic">&ldquo;{review.text}&rdquo;</p>
+                  </div>
 
-                {/* Date */}
-                <p className="text-xs text-muted-foreground">{review.date}</p>
-
-                {/* Replied section */}
-                {review.replied ? (
-                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 sm:p-4 space-y-2">
-                    <div className="flex items-center gap-2 text-emerald-700">
-                      <CheckCircle2 className="h-4 w-4 shrink-0" />
-                      <span className="text-sm font-medium">Risposta inviata</span>
-                      {review.replyDate && (
-                        <span className="text-xs text-emerald-600">
-                          · {review.replyDate}
-                        </span>
-                      )}
+                  {/* Bozza AI - mostra se generata */}
+                  {hasDraft && (
+                    <div className="mb-3 p-3 rounded-lg bg-lumina-gold/5 border border-lumina-gold/20">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <Sparkles className="size-3 text-lumina-gold" />
+                        <span className="text-[11px] font-semibold text-lumina-gold uppercase tracking-wider">Bozza AI</span>
+                      </div>
+                      <textarea
+                        value={drafts[review.id]}
+                        onChange={e => setDrafts(prev => ({ ...prev, [review.id]: e.target.value }))}
+                        rows={3}
+                        className="w-full bg-transparent border-0 text-xs sm:text-sm text-gray-200 focus:outline-none resize-none"
+                      />
                     </div>
-                    <p className="text-sm text-emerald-800 leading-relaxed whitespace-pre-line">
-                      {review.replyText}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3 pt-1">
-                    {!replyTexts[review.id] && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleGenerateReply(review)}
-                        disabled={generatingId === review.id}
-                        className="gap-2"
-                      >
-                        {generatingId === review.id ? (
-                          <>
-                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                            Generazione in corso...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4" />
-                            Genera Risposta AI
-                          </>
-                        )}
-                      </Button>
-                    )}
+                  )}
 
-                    {replyTexts[review.id] !== undefined && (
+                  {/* Azioni */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {!hasDraft ? (
+                      <Button
+                        size="sm"
+                        onClick={() => generateDraft(review)}
+                        disabled={generatingDraft === review.id}
+                        className="bg-lumina-gold hover:bg-lumina-gold-light text-lumina-black font-semibold text-xs h-9 px-3 rounded-lg"
+                      >
+                        {generatingDraft === review.id ? (
+                          <Loader2 className="size-3.5 mr-1 animate-spin" />
+                        ) : (
+                          <Sparkles className="size-3.5 mr-1" />
+                        )}
+                        Genera Risposta AI
+                      </Button>
+                    ) : (
                       <>
-                        <Textarea
-                          value={replyTexts[review.id]}
-                          onChange={(e) =>
-                            setReplyTexts((prev) => ({
-                              ...prev,
-                              [review.id]: e.target.value,
-                            }))
-                          }
-                          rows={4}
-                          className="resize-none"
-                          placeholder="Modifica la risposta prima di inviarla..."
-                        />
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handleSendReply(review)}
-                            disabled={sendingId === review.id}
-                            className="gap-2"
-                          >
-                            {sendingId === review.id ? (
-                              <>
-                                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                Invio...
-                              </>
-                            ) : (
-                              <>
-                                <Send className="h-4 w-4" />
-                                Invia Risposta
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setReplyTexts((prev) => {
-                                const next = { ...prev };
-                                delete next[review.id];
-                                return next;
-                              })
-                            }
-                          >
-                            Annulla
-                          </Button>
-                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => confirmReply(review.id)}
+                          disabled={confirming === review.id}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs h-9 px-3 rounded-lg"
+                        >
+                          {confirming === review.id ? (
+                            <Loader2 className="size-3.5 mr-1 animate-spin" />
+                          ) : (
+                            <Send className="size-3.5 mr-1" />
+                          )}
+                          Conferma e Invia
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => generateDraft(review)}
+                          disabled={generatingDraft === review.id}
+                          className="text-xs h-9 px-2 text-lumina-gold hover:bg-lumina-gold/10"
+                        >
+                          <RefreshCw className={`size-3.5 ${generatingDraft === review.id ? 'animate-spin' : ''}`} />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setDrafts(prev => { const n = { ...prev }; delete n[review.id]; return n; })}
+                          className="text-xs h-9 px-2 text-rose-400 hover:bg-rose-400/10"
+                        >
+                          <X className="size-3.5" />
+                        </Button>
                       </>
                     )}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* RISPOSTE INVIATE */}
+      {replied.length > 0 && (
+        <Card className="bg-lumina-card border-lumina-border">
+          <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+            <CardTitle className="flex items-center gap-2 text-sm sm:text-base text-white">
+              <Check className="size-4 sm:size-5 text-emerald-400" /> Risposte Inviate ({replied.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-3">
+            {replied.map(review => {
+              const pc = platformConfig[review.platform] || platformConfig.google;
+              return (
+                <div key={review.id} className="p-3 sm:p-4 rounded-lg bg-lumina-black/50 border border-emerald-500/20">
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    <span className="font-semibold text-sm text-white">{review.author}</span>
+                    <StarRating rating={review.rating} />
+                    <Badge variant="outline" className={pc.color}>{pc.label}</Badge>
+                    <Badge variant="outline" className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] ml-auto">
+                      Risposto
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-lumina-muted line-clamp-2 mb-1.5">&ldquo;{review.text}&rdquo;</p>
+                  {review.replyText && (
+                    <div className="p-2 rounded bg-emerald-500/5 border border-emerald-500/10">
+                      <p className="text-xs text-emerald-300/80">{review.replyText}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Vuoto */}
+      {!loading && reviews.length === 0 && (
+        <div className="text-center py-12 sm:py-16">
+          <div className="relative inline-block mb-4">
+            <div className="absolute -inset-3 bg-lumina-gold/10 rounded-full blur-xl" />
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-lumina-gold/15 flex items-center justify-center">
+              <MessageSquare className="w-8 h-8 sm:w-10 sm:h-10 text-lumina-gold" />
+            </div>
+          </div>
+          <h3 className="text-base sm:text-lg font-semibold text-white mb-1">Nessuna recensione</h3>
+          <p className="text-xs sm:text-sm text-lumina-muted">Le recensioni appariranno qui quando colleghi gli account social</p>
         </div>
       )}
-    </section>
+    </div>
   );
 }
