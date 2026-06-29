@@ -28,7 +28,7 @@ export default function Home() {
   const ActiveComponent = sections[activeSection] || DashboardHome;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-lumina-black flex">
       <AppSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
       <main className="flex-1 md:ml-64 p-4 md:p-6 lg:p-8">
         <ActiveComponent />
