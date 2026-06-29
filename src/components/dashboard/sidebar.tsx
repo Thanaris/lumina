@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { LayoutDashboard, ShoppingBag, Star, Share2, UtensilsCrossed, CalendarDays, Settings, Menu, X, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -25,39 +26,34 @@ export function AppSidebar({ activeSection, onSectionChange }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile toggle */}
       <Button
         variant="ghost"
         size="icon"
-        className="fixed top-3 left-3 z-50 md:hidden bg-white/90 backdrop-blur shadow-sm"
+        className="fixed top-3 left-3 z-50 md:hidden bg-lumina-dark/90 backdrop-blur shadow-sm text-white"
         onClick={() => setMobileOpen(!mobileOpen)}
       >
         {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </Button>
 
-      {/* Overlay */}
       {mobileOpen && (
-        <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setMobileOpen(false)} />
+        <div className="fixed inset-0 bg-black/70 z-30 md:hidden" onClick={() => setMobileOpen(false)} />
       )}
 
-      {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-40 h-full w-64 bg-gray-900 text-white flex flex-col transition-transform duration-200 md:translate-x-0 ${
+        className={`fixed top-0 left-0 z-40 h-full w-64 bg-lumina-dark border-r border-lumina-border flex flex-col transition-transform duration-200 md:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* Logo */}
-        <div className="p-5 border-b border-white/10">
+        <div className="p-5 border-b border-lumina-border">
           <div className="flex items-center gap-3">
-            <span className="text-3xl">☀️</span>
+            <Image src="/logo.png" alt="Lumina" width={40} height={40} className="rounded-lg" />
             <div>
-              <h1 className="font-bold text-lg leading-tight">Lumina</h1>
-              <p className="text-xs text-gray-400">Assistant per Ristoranti</p>
+              <h1 className="font-bold text-lg leading-tight text-white tracking-wide">LUMINA</h1>
+              <p className="text-[11px] text-lumina-gold font-medium tracking-wider">L&apos;ASSISTENTE AI PER RISTORANTI</p>
             </div>
           </div>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -69,24 +65,25 @@ export function AppSidebar({ activeSection, onSectionChange }: SidebarProps) {
                   onSectionChange(item.id);
                   setMobileOpen(false);
                 }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive ? "bg-emerald-600 text-white" : "text-gray-300 hover:bg-white/10 hover:text-white"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                  isActive
+                    ? "bg-lumina-gold/15 text-lumina-gold border border-lumina-gold/30"
+                    : "text-gray-400 hover:bg-lumina-border/50 hover:text-white border border-transparent"
                 }`}
               >
-                <Icon className="h-4.5 w-4.5" />
+                <Icon className={`h-4 w-4 ${isActive ? "text-lumina-gold" : ""}`} />
                 {item.label}
               </button>
             );
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-white/10">
+        <div className="p-4 border-t border-lumina-border">
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs text-gray-400">AI Attivo</span>
+            <div className="w-2 h-2 rounded-full bg-lumina-gold animate-pulse" />
+            <span className="text-xs text-lumina-gold font-medium">AI Attivo</span>
           </div>
-          <p className="text-[10px] text-gray-500">Lumina v1.0 · Sicilia 🇮🇹</p>
+          <p className="text-[10px] text-gray-600">Lumina v1.0</p>
         </div>
       </aside>
     </>
