@@ -1,464 +1,151 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, UtensilsCrossed, Search } from 'lucide-react';
-import type { MenuItem } from '@/lib/types';
+import { Badge } from '@/components/ui/badge';
+import {
+  UtensilsCrossed, Plus, Edit3, Trash2, Loader2,
+  Search, Wine, Flame, IceCream, Pizza
+} from 'lucide-react';
 
-const CATEGORIES = ["Antipasti", "Primi", "Secondi", "Dolci", "Bevande"];
-const EMOJI_OPTIONS = ["🍝","🐟","🔶","🍆","🧀","🗡️","🦑","🧁","🍰","🧊","🍷","🍺","💧","☕","🍕","🥩","🥗","🥘"];
-
-interface MenuItemFormData {
+interface MenuItem {
+  id: string;
   name: string;
-  description: string;
-  price: string;
+  description?: string;
+  price: number;
   category: string;
-  imageEmoji: string;
-  allergens: string;
   available: boolean;
 }
 
-const emptyForm: MenuItemFormData = {
-  name: '',
-  description: '',
-  price: '',
-  category: 'Primi',
-  imageEmoji: '🍝',
-  allergens: '',
-  available: true,
+const categoryIcons: Record<string, React.ElementType> = {
+  antipasti: Flame,
+  primi: Pizza,
+  secondi: UtensilsCrossed,
+  dolci: IceCream,
+  bevande: Wine,
+};
+
+const categoryColors: Record<string, string> = {
+  antipasti: 'bg-orange-500/20 text-orange-300',
+  primi: 'bg-amber-500/20 text-amber-300',
+  secondi: 'bg-rose-500/20 text-rose-300',
+  dolci: 'bg-pink-500/20 text-pink-300',
+  bevande: 'bg-violet-500/20 text-violet-300',
 };
 
 export default function MenuSection() {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  const [form, setForm] = useState<MenuItemFormData>(emptyForm);
-  const [submitting, setSubmitting] = useState(false);
-
-  const fetchMenu = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await fetch('/api/menu');
-      if (!res.ok) throw new Error('Failed to fetch');
-      const data = await res.json();
-      setMenuItems(data);
-    } catch {
-      toast.error('Errore nel caricamento del menu');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [search, setSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState('tutti');
 
   useEffect(() => {
-    fetchMenu();
-  }, [fetchMenu]);
+    fetch('/api/menu')
+      .then(r => r.json())
+      .then(data => setItems(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-  const filteredItems = menuItems.filter(
-    (item) =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const categories = ['tutti', ...new Set(items.map(i => i.category).filter(Boolean))];
+  const filtered = items.filter(item => {
+    const matchCat = activeCategory === 'tutti' || item.category === activeCategory;
+    const matchSearch = !search || item.name.toLowerCase().includes(search.toLowerCase());
+    return matchCat && matchSearch;
+  });
 
-  const groupedByCategory = CATEGORIES.map((cat) => ({
-    name: cat,
-    items: filteredItems.filter((item) => item.category === cat),
-  })).filter((group) => group.items.length > 0);
-
-  const openCreateDialog = () => {
-    setEditingItem(null);
-    setForm(emptyForm);
-    setDialogOpen(true);
-  };
-
-  const openEditDialog = (item: MenuItem) => {
-    setEditingItem(item);
-    setForm({
-      name: item.name,
-      description: item.description,
-      price: String(item.price),
-      category: item.category,
-      imageEmoji: item.imageEmoji,
-      allergens: item.allergens,
-      available: item.available,
-    });
-    setDialogOpen(true);
-  };
-
-  const handleSubmit = async () => {
-    if (!form.name.trim() || !form.price) {
-      toast.error('Nome e prezzo sono obbligatori');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      if (editingItem) {
-        const res = await fetch(`/api/menu/${editingItem.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: form.name,
-            description: form.description,
-            price: form.price,
-            category: form.category,
-            imageEmoji: form.imageEmoji,
-            allergens: form.allergens,
-            available: form.available,
-          }),
-        });
-        if (!res.ok) throw new Error('Failed to update');
-        toast.success('Piatto aggiornato con successo');
-      } else {
-        const res = await fetch('/api/menu', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: form.name,
-            description: form.description,
-            price: form.price,
-            category: form.category,
-            imageEmoji: form.imageEmoji,
-            allergens: form.allergens,
-            available: form.available,
-          }),
-        });
-        if (!res.ok) throw new Error('Failed to create');
-        toast.success('Piatto aggiunto con successo');
-      }
-      setDialogOpen(false);
-      fetchMenu();
-    } catch {
-      toast.error('Errore durante il salvataggio');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      const res = await fetch(`/api/menu/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete');
-      toast.success('Piatto eliminato');
-      fetchMenu();
-    } catch {
-      toast.error('Errore durante l\'eliminazione');
-    }
-  };
-
-  const handleToggleAvailable = async (item: MenuItem) => {
-    try {
-      const res = await fetch(`/api/menu/${item.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ available: !item.available }),
-      });
-      if (!res.ok) throw new Error('Failed to toggle');
-      fetchMenu();
-      toast.success(item.available ? 'Piatto segnato come non disponibile' : 'Piatto reso disponibile');
-    } catch {
-      toast.error('Errore nell\'aggiornamento');
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-4 w-72 mt-2" />
-          </div>
-          <Skeleton className="h-10 w-36" />
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {[...Array(6)].map((_, i) => (
-            <Skeleton key={i} className="h-48 rounded-xl" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const grouped = activeCategory === 'tutti'
+    ? Object.entries(filtered.reduce((acc, item) => {
+        const cat = item.category || 'altro';
+        (acc[cat] = acc[cat] || []).push(item);
+        return acc;
+      }, {} as Record<string, MenuItem[]>))
+    : { [activeCategory]: filtered };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="pt-10 md:pt-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <UtensilsCrossed className="h-6 w-6 text-primary" />
+          <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+            <UtensilsCrossed className="size-5 sm:size-6 text-lumina-gold" />
             Menu Digitale
           </h2>
-          <p className="text-muted-foreground mt-1">
-            Gestisci i piatti del tuo ristorante
-          </p>
+          <p className="text-sm text-lumina-muted mt-0.5">Gestisci piatti, prezzi e categorie</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openCreateDialog} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Aggiungi Piatto
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>
-                {editingItem ? 'Modifica Piatto' : 'Nuovo Piatto'}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              {/* Name */}
-              <div className="grid gap-2">
-                <Label htmlFor="name">Nome *</Label>
-                <Input
-                  id="name"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="Es. Spaghetti alla Carbonara"
-                />
-              </div>
-
-              {/* Description */}
-              <div className="grid gap-2">
-                <Label htmlFor="description">Descrizione</Label>
-                <Textarea
-                  id="description"
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Descrizione del piatto..."
-                  rows={3}
-                />
-              </div>
-
-              {/* Price & Category */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="price">Prezzo (€) *</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={form.price}
-                    onChange={(e) => setForm({ ...form, price: e.target.value })}
-                    placeholder="12.50"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Categoria</Label>
-                  <Select
-                    value={form.category}
-                    onValueChange={(value) => setForm({ ...form, category: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleziona" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map((cat) => (
-                        <SelectItem key={cat} value={cat}>
-                          {cat}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Emoji Selector */}
-              <div className="grid gap-2">
-                <Label>Icona Emoji</Label>
-                <div className="flex flex-wrap gap-2">
-                  {EMOJI_OPTIONS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => setForm({ ...form, imageEmoji: emoji })}
-                      className={`text-2xl p-1.5 rounded-lg transition-all hover:scale-110 ${
-                        form.imageEmoji === emoji
-                          ? 'bg-primary/15 ring-2 ring-primary'
-                          : 'bg-muted hover:bg-muted/80'
-                      }`}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Allergens */}
-              <div className="grid gap-2">
-                <Label htmlFor="allergens">Allergeni</Label>
-                <Input
-                  id="allergens"
-                  value={form.allergens}
-                  onChange={(e) => setForm({ ...form, allergens: e.target.value })}
-                  placeholder="Glutine, Lattosio, Uova..."
-                />
-              </div>
-
-              {/* Available Toggle */}
-              <div className="flex items-center justify-between rounded-lg border p-3">
-                <div>
-                  <Label htmlFor="available" className="font-medium">
-                    Disponibile
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Il piatto è visibile nel menu
-                  </p>
-                </div>
-                <Switch
-                  id="available"
-                  checked={form.available}
-                  onCheckedChange={(checked) => setForm({ ...form, available: checked })}
-                />
-              </div>
-            </div>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <DialogClose asChild>
-                <Button variant="outline">Annulla</Button>
-              </DialogClose>
-              <Button onClick={handleSubmit} disabled={submitting}>
-                {submitting
-                  ? 'Salvataggio...'
-                  : editingItem
-                  ? 'Salva Modifiche'
-                  : 'Aggiungi Piatto'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button className="bg-lumina-gold hover:bg-lumina-gold-light text-lumina-black font-semibold rounded-xl w-full sm:w-auto">
+          <Plus className="size-4 mr-1" /> Aggiungi Piatto
+        </Button>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Cerca nel menu..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-
-      {/* Menu Groups */}
-      {groupedByCategory.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <UtensilsCrossed className="h-12 w-12 text-muted-foreground/40 mb-4" />
-            <p className="text-lg font-medium text-muted-foreground">
-              {searchQuery ? 'Nessun risultato trovato' : 'Nessun piatto nel menu'}
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {searchQuery
-                ? 'Prova con un termine diverso'
-                : 'Aggiungi il tuo primo piatto per iniziare'}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-8">
-          {groupedByCategory.map((group) => (
-            <section key={group.name}>
-              <h3 className="text-lg font-semibold mb-4 border-b pb-2">
-                {group.name}
-                <Badge variant="secondary" className="ml-2">
-                  {group.items.length}
-                </Badge>
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {group.items.map((item) => (
-                  <Card
-                    key={item.id}
-                    className={`group relative transition-all hover:shadow-md ${
-                      !item.available ? 'opacity-60' : ''
-                    }`}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="text-4xl flex-shrink-0 mt-1">
-                          {item.imageEmoji}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <h4 className="font-semibold text-sm leading-tight truncate">
-                              {item.name}
-                            </h4>
-                            <span className="text-base font-bold text-primary whitespace-nowrap">
-                              €{item.price.toFixed(2)}
-                            </span>
-                          </div>
-                          {item.description && (
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                              {item.description}
-                            </p>
-                          )}
-                          {item.allergens && (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              {item.allergens.split(',').map((a) => (
-                                <Badge
-                                  key={a.trim()}
-                                  variant="outline"
-                                  className="text-[10px] px-1.5 py-0"
-                                >
-                                  {a.trim()}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Actions row */}
-                      <div className="flex items-center justify-between mt-3 pt-3 border-t">
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={item.available}
-                            onCheckedChange={() => handleToggleAvailable(item)}
-                            aria-label="Disponibilità"
-                          />
-                          <span className="text-xs text-muted-foreground">
-                            {item.available ? 'Disponibile' : 'Non disponibile'}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => openEditDialog(item)}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                            <span className="sr-only">Modifica</span>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(item.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            <span className="sr-only">Elimina</span>
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </section>
+      {/* Ricerca e filtri */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Cerca nel menu..."
+            className="w-full bg-lumina-card border border-lumina-border rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-lumina-gold/50"
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {categories.map(cat => (
+            <button key={cat} onClick={() => setActiveCategory(cat)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border transition-colors capitalize ${
+                activeCategory === cat
+                  ? 'bg-lumina-gold/15 text-lumina-gold border-lumina-gold/30'
+                  : 'border-lumina-border text-gray-400 hover:text-white hover:bg-lumina-border/50'
+              }`}>
+              {cat}
+            </button>
           ))}
         </div>
+      </div>
+
+      {/* Menu raggruppato */}
+      {loading ? (
+        <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-24 rounded-xl bg-lumina-card border-lumina-border animate-pulse" />)}</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12">
+          <UtensilsCrossed className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+          <p className="text-sm text-lumina-muted">Nessun piatto trovato</p>
+        </div>
+      ) : (
+        Object.entries(grouped).map(([category, catItems]) => {
+          const Icon = categoryIcons[category] || UtensilsCrossed;
+          const color = categoryColors[category] || 'bg-gray-500/20 text-gray-300';
+          return (
+            <Card key={category} className="bg-lumina-card border-lumina-border">
+              <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+                <CardTitle className="flex items-center gap-2 text-sm sm:text-base text-white capitalize">
+                  <Icon className={`size-4 sm:size-5 ${color.split(' ')[1]}`} />
+                  {category}
+                  <Badge variant="outline" className={`${color} text-[10px]`}>{catItems.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-2">
+                {catItems.map(item => (
+                  <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-lumina-black/50 border border-lumina-border hover:border-lumina-gold/20 transition-colors">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm text-white truncate">{item.name}</p>
+                        {!item.available && <Badge variant="outline" className="bg-rose-500/20 text-rose-300 border-rose-500/30 text-[10px]">Non disp.</Badge>}
+                      </div>
+                      {item.description && <p className="text-[11px] sm:text-xs text-lumina-muted mt-0.5 line-clamp-1">{item.description}</p>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className="font-bold text-sm text-lumina-gold">€{item.price.toFixed(2)}</span>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-white">
+                        <Edit3 className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })
       )}
     </div>
   );
