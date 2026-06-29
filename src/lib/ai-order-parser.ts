@@ -16,38 +16,39 @@ interface OrderParseResult {
   aiReply: string;
 }
 
-async function callGemini(systemPrompt: string, messages: { role: string; content: string }[]) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY non configurata su Vercel");
+async function callGroq(systemPrompt: string, messages: { role: string; content: string }[]) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error("GROQ_API_KEY non configurata su Vercel");
 
-  const geminiContents = messages.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
+  const groqMessages = [
+    { role: "system" as const, content: systemPrompt },
+    ...messages.map((m) => ({
+      role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+      content: m.content,
+    })),
+  ];
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: geminiContents,
-        generationConfig: {
-          temperature: 0.7,
-          responseMimeType: "application/json",
-        },
-      }),
-    }
-  );
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: groqMessages,
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+    }),
+  });
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Gemini API error ${res.status}: ${errText}`);
+    throw new Error(`Groq API error ${res.status}: ${errText}`);
   }
 
   const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  return data.choices?.[0]?.message?.content || "";
 }
 
 export async function parseCustomerMessage(
@@ -70,19 +71,13 @@ export async function parseCustomerMessage(
   const isWeekend = dayOfWeek === "sabato" || dayOfWeek === "domenica";
   const timeOfDay = today.getHours();
   const mealPeriod =
-    timeOfDay < 11
-      ? "colazione"
-      : timeOfDay < 15
-        ? "pranzo"
-        : timeOfDay < 18
-          ? "spuntino"
-          : "cena";
+    timeOfDay < 11 ? "colazione" : timeOfDay < 15 ? "pranzo" : timeOfDay < 18 ? "spuntino" : "cena";
 
   const systemPrompt = `Sei l'assistente AI di "${restaurant?.name || "un ristorante"}", un ristorante di cucina siciliana.
 Oggi e ${dayOfWeek}, ${isWeekend ? "e il weekend" : "e un giorno feriale"}, e ora di ${mealPeriod}.
 
 Il tuo compito:
-1. Conversare con il cliente in modo cordiale e professionale, come un cameriere esperto
+1. Conversare con il cliente in modo cordiale e professionale
 2. Capire se il cliente vuole ordinare cibo
 3. Se menziona piatti dal menu, identificarli e creare un ordine
 4. Se chiede info (orari, indirizzo, prenotazioni), rispondi usando i dati del ristorante
@@ -101,10 +96,9 @@ REGOLE:
 - Se chiede il menu, elenca le categorie e chiedi cosa interessa
 - Se ordina, conferma articoli, quantita e totale
 - Se un piatto non e nel menu, proponi un alternativa
-- Se menziona allergie, avvisa sui piatti che contengono quell allergene
 - Non inventare piatti non nel menu
 
-Rispondi SOLO con questo JSON, niente altro:
+Rispondi SOLO con questo JSON:
 {"aiReply":"risposta al cliente","isOrder":false,"items":[],"notes":"","total":0}
 
 Se e un ordine: isOrder=true, items=[{"name":"nome esatto dal menu","quantity":N,"price":P}]
@@ -120,7 +114,7 @@ notes=note cliente, total=somma quantity*price. SOLO JSON valido.`;
 
   messages.push({ role: "user", content: customerMessage });
 
-  const rawContent = await callGemini(systemPrompt, messages);
+  const rawContent = await callGroq(systemPrompt, messages);
 
   let result: OrderParseResult;
   try {
