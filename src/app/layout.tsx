@@ -14,10 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lumina - Assistente AI per Ristoranti Siciliani",
-  description: "Dashboard intelligente per gestire ordini WhatsApp, recensioni, social media e menu del tuo ristorante. Zero costi, massima efficienza.",
+  title: "Lumina — L'Assistente AI per Ristoranti",
+  description: "Dashboard intelligente per gestire ordini WhatsApp, recensioni, social media e menu del tuo ristorante.",
   icons: {
-    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>",
+    icon: "/logo.png",
   },
 };
 
@@ -29,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="it" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50 text-gray-900`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-lumina-black text-white`}
       >
         {children}
         <Toaster position="top-right" richColors />
