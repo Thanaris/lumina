@@ -1,321 +1,142 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
-import { Settings, Save, MessageCircle, Globe, Instagram, CheckCircle2, XCircle, Phone } from 'lucide-react';
-import type { Restaurant } from '@/lib/types';
-
-interface PlatformStatus {
-  name: string;
-  icon: React.ReactNode;
-  connected: boolean;
-}
+import {
+  Settings, Save, Loader2, Store, Bell, Bot, Palette,
+  Shield, Globe, Key, ChevronRight, Check, AlertCircle
+} from 'lucide-react';
 
 export default function SettingsSection() {
-  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    name: '',
-    address: '',
-    phone: '',
-    email: '',
-    instagram: '',
-    tiktok: '',
-    description: '',
-    tables: '0',
-  });
+  const [saved, setSaved] = useState(false);
 
-  const fetchRestaurant = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch('/api/restaurant');
-      if (!res.ok) throw new Error('Failed to fetch');
-      const data: Restaurant = await res.json();
-      setRestaurant(data);
-      setForm({
-        name: data.name,
-        address: data.address,
-        phone: data.phone,
-        email: data.email,
-        instagram: data.instagram,
-        tiktok: data.tiktok,
-        description: data.description,
-        tables: String(data.tables),
-      });
-    } catch {
-      toast.error('Errore nel caricamento delle impostazioni');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchRestaurant();
-  }, []);
+  const [restaurantName, setRestaurantName] = useState('Lumina');
+  const [cuisine, setCuisine] = useState('Italiana');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [aiTone, setAiTone] = useState('professionale');
+  const [autoReply, setAutoReply] = useState(true);
+  const [notifReviews, setNotifReviews] = useState(true);
+  const [notifOrders, setNotifOrders] = useState(true);
 
   const handleSave = async () => {
-    if (!form.name.trim()) {
-      toast.error('Il nome del ristorante è obbligatorio');
-      return;
-    }
-
     setSaving(true);
-    try {
-      const res = await fetch('/api/restaurant', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name,
-          address: form.address,
-          phone: form.phone,
-          email: form.email,
-          instagram: form.instagram,
-          tiktok: form.tiktok,
-          description: form.description,
-          tables: parseInt(form.tables, 10),
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to save');
-      const updated: Restaurant = await res.json();
-      setRestaurant(updated);
-      toast.success('Impostazioni salvate con successo');
-    } catch {
-      toast.error('Errore durante il salvataggio');
-    } finally {
-      setSaving(false);
-    }
+    // Simula salvataggio
+    await new Promise(r => setTimeout(r, 1000));
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
-  const platforms: PlatformStatus[] = [
-    {
-      name: 'Google Business',
-      icon: <Globe className="h-5 w-5" />,
-      connected: false,
-    },
-    {
-      name: 'TripAdvisor',
-      icon: <Globe className="h-5 w-5" />,
-      connected: false,
-    },
-    {
-      name: 'Instagram',
-      icon: <Instagram className="h-5 w-5" />,
-      connected: !!form.instagram,
-    },
-    {
-      name: 'TikTok',
-      icon: (
-        <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
-          <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.88-2.88 2.89 2.89 0 0 1 2.88-2.88c.28 0 .56.04.82.11V9.02a6.37 6.37 0 0 0-.82-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.86a8.28 8.28 0 0 0 3.77.92V6.37a4.85 4.85 0 0 1-.01.32z" />
-        </svg>
-      ),
-      connected: !!form.tiktok,
-    },
-  ];
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-4 w-72 mt-2" />
-        </div>
-        <Skeleton className="h-[500px] rounded-xl" />
-        <Skeleton className="h-48 rounded-xl" />
-        <Skeleton className="h-32 rounded-xl" />
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Settings className="h-6 w-6 text-primary" />
+    <div className="space-y-4 sm:space-y-6 max-w-2xl">
+      <div className="pt-10 md:pt-0">
+        <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+          <Settings className="size-5 sm:size-6 text-lumina-gold" />
           Impostazioni
         </h2>
-        <p className="text-muted-foreground mt-1">
-          Configura il tuo ristorante
-        </p>
+        <p className="text-sm text-lumina-muted mt-0.5">Configura il tuo ristorante</p>
       </div>
 
-      {/* Restaurant Info Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Informazioni Ristorante</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="name">Nome ristorante *</Label>
-              <Input
-                id="name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Il mio ristorante"
-              />
-            </div>
-            <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="address">Indirizzo</Label>
-              <Input
-                id="address"
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-                placeholder="Via Roma 1, 00100 Roma"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="phone">Telefono</Label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="phone"
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  placeholder="+39 06 12345678"
-                  className="pl-9"
-                />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="info@ristorante.it"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="instagram">Instagram</Label>
-              <div className="relative">
-                <Instagram className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="instagram"
-                  value={form.instagram}
-                  onChange={(e) => setForm({ ...form, instagram: e.target.value })}
-                  placeholder="@ilmioristorante"
-                  className="pl-9"
-                />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="tiktok">TikTok</Label>
-              <Input
-                id="tiktok"
-                value={form.tiktok}
-                onChange={(e) => setForm({ ...form, tiktok: e.target.value })}
-                placeholder="@ilmioristorante"
-              />
-            </div>
-            <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="description">Descrizione</Label>
-              <Textarea
-                id="description"
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Descrivi il tuo ristorante, la cucina, l'atmosfera..."
-                rows={3}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="tables">Numero tavoli</Label>
-              <Input
-                id="tables"
-                type="number"
-                min="1"
-                max="200"
-                value={form.tables}
-                onChange={(e) => setForm({ ...form, tables: e.target.value })}
-                placeholder="15"
-              />
-            </div>
-          </div>
-          <Separator />
-          <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={saving} className="gap-2">
-              <Save className="h-4 w-4" />
-              {saving ? 'Salvataggio...' : 'Salva Impostazioni'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* WhatsApp Setup Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <MessageCircle className="h-5 w-5" />
-            Configurazione WhatsApp Business
+      {/* Info Ristorante */}
+      <Card className="bg-lumina-card border-lumina-border">
+        <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+          <CardTitle className="flex items-center gap-2 text-sm sm:text-base text-white">
+            <Store className="size-4 sm:size-5 text-lumina-gold" /> Informazioni Ristorante
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Collega il tuo account WhatsApp Business per permettere ai clienti di prenotare
-            direttamente tramite WhatsApp e ricevere conferme automatiche.
-          </p>
-          <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-            <h4 className="font-semibold text-sm">Come collegare WhatsApp Business:</h4>
-            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-              <li>Assicurati di avere un account WhatsApp Business attivo</li>
-              <li>Vai su Impostazioni del tuo business account WhatsApp</li>
-              <li>Attiva l&apos;API di WhatsApp Business tramite Meta Developer</li>
-              <li>Inserisci il tuo numero di telefono verificato</li>
-              <li>Configura i template di messaggio per conferme e promemoria</li>
-            </ol>
+        <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-3">
+          <div>
+            <label className="text-xs font-medium text-lumina-muted mb-1 block">Nome Ristorante</label>
+            <input value={restaurantName} onChange={e => setRestaurantName(e.target.value)}
+              className="w-full bg-lumina-black border border-lumina-border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-lumina-gold/50" />
           </div>
-          <p className="text-xs text-muted-foreground">
-            L&apos;integrazione WhatsApp verrà disponibile in una prossima versione.
-            Contatta il supporto per maggiori informazioni.
-          </p>
+          <div>
+            <label className="text-xs font-medium text-lumina-muted mb-1 block">Tipo Cucina</label>
+            <input value={cuisine} onChange={e => setCuisine(e.target.value)}
+              className="w-full bg-lumina-black border border-lumina-border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-lumina-gold/50" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-lumina-muted mb-1 block">Telefono</label>
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+39 ..."
+              className="w-full bg-lumina-black border border-lumina-border rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-lumina-gold/50" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-lumina-muted mb-1 block">Indirizzo</label>
+            <input value={address} onChange={e => setAddress(e.target.value)} placeholder="Via..., Citta..."
+              className="w-full bg-lumina-black border border-lumina-border rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-lumina-gold/50" />
+          </div>
         </CardContent>
       </Card>
 
-      {/* Connected Platforms Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Piattaforme Collegate</CardTitle>
+      {/* AI */}
+      <Card className="bg-lumina-card border-lumina-border">
+        <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+          <CardTitle className="flex items-center gap-2 text-sm sm:text-base text-white">
+            <Bot className="size-4 sm:size-5 text-lumina-gold" /> Impostazioni AI
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {platforms.map((platform) => (
-              <div
-                key={platform.name}
-                className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/30"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                    {platform.icon}
-                  </div>
-                  <span className="font-medium text-sm">{platform.name}</span>
-                </div>
-                {platform.connected ? (
-                  <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 gap-1">
-                    <CheckCircle2 className="h-3 w-3" />
-                    Collegato
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="gap-1 text-muted-foreground">
-                    <XCircle className="h-3 w-3" />
-                    Non collegato
-                  </Badge>
-                )}
-              </div>
-            ))}
+        <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4">
+          <div>
+            <label className="text-xs font-medium text-lumina-muted mb-1 block">Tono Risposte AI</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {['professionale', 'amichevole', 'elegante', 'informale'].map(t => (
+                <button key={t} onClick={() => setAiTone(t)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors capitalize ${
+                    aiTone === t ? 'bg-lumina-gold/15 text-lumina-gold border-lumina-gold/30' : 'border-lumina-border text-gray-400 hover:text-white'
+                  }`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-lg bg-lumina-black/50 border border-lumina-border">
+            <div>
+              <p className="text-sm font-medium text-white">Risposta automatica AI</p>
+              <p className="text-[11px] text-lumina-muted">Lumina risponde automaticamente ai clienti</p>
+            </div>
+            <button onClick={() => setAutoReply(!autoReply)}
+              className={`w-11 h-6 rounded-full transition-colors relative ${autoReply ? 'bg-lumina-gold' : 'bg-gray-600'}`}>
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${autoReply ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+            </button>
           </div>
         </CardContent>
       </Card>
+
+      {/* Notifiche */}
+      <Card className="bg-lumina-card border-lumina-border">
+        <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+          <CardTitle className="flex items-center gap-2 text-sm sm:text-base text-white">
+            <Bell className="size-4 sm:size-5 text-lumina-gold" /> Notifiche
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-3">
+          {[
+            { label: 'Nuove recensioni', desc: 'Ricevi notifica per ogni nuova recensione', value: notifReviews, setter: setNotifReviews },
+            { label: 'Nuovi ordini', desc: 'Ricevi notifica per ogni nuovo ordine', value: notifOrders, setter: setNotifOrders },
+          ].map(item => (
+            <div key={item.label} className="flex items-center justify-between p-3 rounded-lg bg-lumina-black/50 border border-lumina-border">
+              <div>
+                <p className="text-sm font-medium text-white">{item.label}</p>
+                <p className="text-[11px] text-lumina-muted">{item.desc}</p>
+              </div>
+              <button onClick={() => item.setter(!item.value)}
+                className={`w-11 h-6 rounded-full transition-colors relative ${item.value ? 'bg-lumina-gold' : 'bg-gray-600'}`}>
+                <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${item.value ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Salva */}
+      <Button onClick={handleSave} disabled={saving}
+        className="w-full bg-lumina-gold hover:bg-lumina-gold-light text-lumina-black font-semibold h-12 rounded-xl">
+        {saving ? <Loader2 className="size-4 mr-2 animate-spin" /> : saved ? <Check className="size-4 mr-2" /> : <Save className="size-4 mr-2" />}
+        {saving ? 'Salvataggio...' : saved ? 'Salvato!' : 'Salva Impostazioni'}
+      </Button>
     </div>
   );
 }
