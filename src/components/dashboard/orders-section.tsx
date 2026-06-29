@@ -1,517 +1,308 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogClose,
-} from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { toast } from 'sonner';
-import {
-  Plus,
-  Phone,
-  ChefHat,
-  CheckCircle2,
-  Truck,
-  XCircle,
-  Search,
-  MessageSquare,
-  Minus,
+  ShoppingBag, ChefHat, Clock, Check, Truck, X, Printer,
+  Loader2, UtensilsCrossed, Wine, AlertCircle, Flame, Send
 } from 'lucide-react';
-import type { Order, MenuItem } from '@/lib/types';
 
-const statusPipeline = ['nuovo', 'in_cucina', 'pronto', 'consegnato'];
+interface OrderItem {
+  id?: string;
+  name?: string;
+  menuItem?: { name: string; category?: string; };
+  quantity: number;
+  price: number;
+}
 
-const statusConfig: Record<string, { label: string; color: string; borderColor: string; bgColor: string }> = {
-  nuovo: {
-    label: 'Nuovo',
-    color: 'text-amber-700',
-    borderColor: 'border-amber-300',
-    bgColor: 'bg-amber-50',
-  },
-  in_cucina: {
-    label: 'In Cucina',
-    color: 'text-orange-700',
-    borderColor: 'border-orange-300',
-    bgColor: 'bg-orange-50',
-  },
-  pronto: {
-    label: 'Pronto',
-    color: 'text-emerald-700',
-    borderColor: 'border-emerald-300',
-    bgColor: 'bg-emerald-50',
-  },
-  consegnato: {
-    label: 'Consegnato',
-    color: 'text-gray-500',
-    borderColor: 'border-gray-200',
-    bgColor: 'bg-gray-50',
-  },
-  annullato: {
-    label: 'Annullato',
-    color: 'text-rose-600',
-    borderColor: 'border-rose-200',
-    bgColor: 'bg-rose-50',
-  },
+interface Order {
+  id: string;
+  customerName: string;
+  customerPhone?: string;
+  status: string;
+  total: number;
+  notes?: string;
+  source: string;
+  createdAt: string;
+  items: OrderItem[];
+}
+
+const statusFlow = ['nuovo', 'in_cucina', 'pronto', 'consegnato'];
+const statusLabels: Record<string, string> = {
+  nuovo: 'Nuovo',
+  in_cucina: 'In Cucina',
+  pronto: 'Pronto',
+  consegnato: 'Consegnato',
+  annullato: 'Annullato',
+};
+const statusColors: Record<string, string> = {
+  nuovo: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  in_cucina: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+  pronto: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  consegnato: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  annullato: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
 };
 
-interface CartItem {
-  menuItem: MenuItem;
-  quantity: number;
+const nextStatusAction: Record<string, { label: string; icon: React.ElementType; color: string; nextStatus: string }> = {
+  nuovo: { label: 'Accetta', icon: ChefHat, color: 'bg-orange-600 hover:bg-orange-500 text-white', nextStatus: 'in_cucina' },
+  in_cucina: { label: 'Pronto!', icon: Check, color: 'bg-emerald-600 hover:bg-emerald-500 text-white', nextStatus: 'pronto' },
+  pronto: { label: 'Consegnato', icon: Truck, color: 'bg-blue-600 hover:bg-blue-500 text-white', nextStatus: 'consegnato' },
+};
+
+// Separa cibo da bevande
+function separateItems(items: OrderItem[]) {
+  const food: OrderItem[] = [];
+  const drinks: OrderItem[] = [];
+  const drinkKeywords = ['acqua', 'vino', 'birra', 'caffè', 'cappuccino', 'the', 'tè', 'succo', 'spritz', 'cocktail', 'limonata', 'bibita', 'bevanda', 'prosecco', 'mohito', 'aperol', 'drink', 'coca', 'fanta', 'sprite', 'liquore', 'digestivo', 'grappa', 'amaro'];
+
+  for (const item of items) {
+    const name = (item.menuItem?.name || item.name || '').toLowerCase();
+    const cat = (item.menuItem?.category || '').toLowerCase();
+    const isDrink = drinkKeywords.some(kw => name.includes(kw)) || cat.includes('bevand') || cat.includes('drink') || cat.includes('vino');
+    (isDrink ? drinks : food).push(item);
+  }
+  return { food, drinks };
 }
 
 export default function OrdersSection() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [orderNotes, setOrderNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [updating, setUpdating] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<string>('attivi');
+  const printRef = useRef<HTMLDivElement>(null);
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = async () => {
     try {
       const res = await fetch('/api/orders');
       const data = await res.json();
       setOrders(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Error fetching orders:', err);
+      console.error('Error:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
-  useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+  useEffect(() => { fetchOrders(); }, []);
 
-  async function fetchMenuItems() {
+  // Aggiorna stato ordine
+  const updateStatus = async (orderId: string, newStatus: string) => {
+    setUpdating(orderId);
     try {
-      const res = await fetch('/api/menu');
-      const data = await res.json();
-      setMenuItems(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Error fetching menu items:', err);
-    }
-  }
-
-  async function updateOrderStatus(id: string, status: string) {
-    try {
-      const res = await fetch(`/api/orders/${id}`, {
+      const res = await fetch('/api/orders/' + orderId, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status: newStatus }),
       });
-      if (res.ok) {
-        toast.success(`Ordine aggiornato: ${statusConfig[status]?.label || status}`);
-        fetchOrders();
+      const data = await res.json();
+      if (data.success) {
+        if (newStatus === 'in_cucina') {
+          // Mostra comanda da stampare
+          window.alert('Comanda inviata in cucina! 📋');
+        }
+        await fetchOrders();
       } else {
-        toast.error('Errore nell\'aggiornamento dell\'ordine');
+        alert('Errore: ' + (data.error || ''));
       }
-    } catch {
-      toast.error('Errore di connessione');
-    }
-  }
-
-  function openNewOrderDialog() {
-    setCustomerName('');
-    setCustomerPhone('');
-    setOrderNotes('');
-    setCart([]);
-    setSearchQuery('');
-    fetchMenuItems();
-    setDialogOpen(true);
-  }
-
-  function addToCart(item: MenuItem) {
-    setCart((prev) => {
-      const existing = prev.find((c) => c.menuItem.id === item.id);
-      if (existing) {
-        return prev.map((c) =>
-          c.menuItem.id === item.id ? { ...c, quantity: c.quantity + 1 } : c
-        );
-      }
-      return [...prev, { menuItem: item, quantity: 1 }];
-    });
-  }
-
-  function updateCartQuantity(menuItemId: string, delta: number) {
-    setCart((prev) => {
-      return prev
-        .map((c) =>
-          c.menuItem.id === menuItemId ? { ...c, quantity: c.quantity + delta } : c
-        )
-        .filter((c) => c.quantity > 0);
-    });
-  }
-
-  const cartTotal = cart.reduce((sum, c) => sum + c.menuItem.price * c.quantity, 0);
-
-  async function submitOrder() {
-    if (cart.length === 0) {
-      toast.error('Aggiungi almeno un piatto all\'ordine');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerName: customerName || 'Cliente da Banco',
-          customerPhone,
-          notes: orderNotes,
-          source: 'banco',
-          items: cart.map((c) => ({ menuItemId: c.menuItem.id, quantity: c.quantity })),
-        }),
-      });
-      if (res.ok) {
-        toast.success('Ordine creato con successo!');
-        setDialogOpen(false);
-        fetchOrders();
-      } else {
-        toast.error('Errore nella creazione dell\'ordine');
-      }
-    } catch {
-      toast.error('Errore di connessione');
+    } catch (err) {
+      alert('Errore di connessione');
     } finally {
-      setSubmitting(false);
+      setUpdating(null);
     }
-  }
+  };
 
-  const filteredMenu = menuItems.filter(
-    (item) =>
-      item.available &&
-      (item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.category.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  // Stampa comanda
+  const printTicket = (order: Order) => {
+    const { food, drinks } = separateItems(order.items);
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
 
-  const ordersByStatus = statusPipeline.reduce(
-    (acc, status) => {
-      acc[status] = orders.filter((o) => o.status === status);
-      return acc;
-    },
-    {} as Record<string, Order[]>
-  );
-  ordersByStatus['annullato'] = orders.filter((o) => o.status === 'annullato');
+    let html = `<html><head><title>Comanda #${order.id.slice(-6)}</title>
+    <style>body{font-family:monospace;font-size:14px;padding:20px;max-width:300px;margin:0 auto;}
+    h1{text-align:center;font-size:18px;border-bottom:2px dashed #000;padding-bottom:10px;}
+    h2{font-size:14px;margin:15px 0 5px;text-decoration:underline;}
+    .item{display:flex;justify-content:space-between;padding:3px 0;}
+    .total{border-top:2px dashed #000;padding-top:8px;margin-top:10px;font-weight:bold;font-size:16px;}
+    .notes{margin-top:10px;font-style:italic;border:1px dashed #000;padding:5px;}
+    .time{text-align:center;color:#666;font-size:12px;}</style></head><body>`;
+    html += `<h1>LUMINA - COMANDA</h1>`;
+    html += `<div class="time">${new Date(order.createdAt).toLocaleString('it-IT')}</div>`;
+    html += `<p><strong>Cliente:</strong> ${order.customerName}</p>`;
+    if (order.customerPhone) html += `<p><strong>Tel:</strong> ${order.customerPhone}</p>`;
+    html += `<p><strong>Fonte:</strong> ${order.source}</p>`;
 
-  function OrderCard({ order }: { order: Order }) {
-    const config = statusConfig[order.status] || statusConfig.nuovo;
-    const statusIdx = statusPipeline.indexOf(order.status);
+    if (food.length > 0) {
+      html += `<h2>🔥 CUCINA</h2>`;
+      food.forEach(i => {
+        const name = i.menuItem?.name || i.name || 'Articolo';
+        html += `<div class="item"><span>${i.quantity}x ${name}</span><span>€${(i.price * i.quantity).toFixed(2)}</span></div>`;
+      });
+    }
+    if (drinks.length > 0) {
+      html += `<h2>🍷 BEVANDE</h2>`;
+      drinks.forEach(i => {
+        const name = i.menuItem?.name || i.name || 'Articolo';
+        html += `<div class="item"><span>${i.quantity}x ${name}</span><span>€${(i.price * i.quantity).toFixed(2)}</span></div>`;
+      });
+    }
+    html += `<div class="total">TOTALE: €${order.total.toFixed(2)}</div>`;
+    if (order.notes) html += `<div class="notes">Note: ${order.notes}</div>`;
+    html += `</body></html>`;
 
-    return (
-      <div className={`rounded-xl border-2 ${config.borderColor} ${config.bgColor} p-4 transition-all hover:shadow-md`}>
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <p className="font-semibold text-sm">{order.customerName}</p>
-            {order.customerPhone && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                <Phone className="size-3" /> {order.customerPhone}
-              </p>
-            )}
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {new Date(order.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-          </span>
-        </div>
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
+  };
 
-        <div className="space-y-1.5 mb-3">
-          {order.items?.map((item) => (
-            <div key={item.id} className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-1.5">
-                <span>{item.menuItem?.imageEmoji || '🍽️'}</span>
-                <span className="text-xs text-muted-foreground">x{item.quantity}</span>
-                <span>{item.menuItem?.name || 'Piatto'}</span>
-              </span>
-              <span className="font-medium">€{(item.price * item.quantity).toFixed(2)}</span>
-            </div>
-          ))}
-        </div>
+  const filtered = orders.filter(o => {
+    if (activeFilter === 'attivi') return ['nuovo', 'in_cucina', 'pronto'].includes(o.status);
+    if (activeFilter === 'completati') return o.status === 'consegnato';
+    return o.status === activeFilter;
+  });
 
-        <Separator className="my-2" />
-
-        <div className="flex items-center justify-between">
-          <p className="font-bold text-sm">Totale: €{order.total.toFixed(2)}</p>
-        </div>
-
-        {order.notes && (
-          <div className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground bg-white/60 rounded-md p-2">
-            <MessageSquare className="size-3 mt-0.5 shrink-0" />
-            <span>{order.notes}</span>
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-2 mt-3">
-          {order.status === 'nuovo' && (
-            <Button
-              size="sm"
-              className="bg-amber-500 hover:bg-amber-600 text-white text-xs"
-              onClick={() => updateOrderStatus(order.id, 'in_cucina')}
-            >
-              <ChefHat className="size-3.5" />
-              Accetta
-            </Button>
-          )}
-          {order.status === 'in_cucina' && (
-            <Button
-              size="sm"
-              className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs"
-              onClick={() => updateOrderStatus(order.id, 'pronto')}
-            >
-              <CheckCircle2 className="size-3.5" />
-              Pronto!
-            </Button>
-          )}
-          {order.status === 'pronto' && (
-            <Button
-              size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-              onClick={() => updateOrderStatus(order.id, 'consegnato')}
-            >
-              <Truck className="size-3.5" />
-              Consegnato
-            </Button>
-          )}
-          {order.status !== 'consegnato' && order.status !== 'annullato' && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs"
-              onClick={() => updateOrderStatus(order.id, 'annullato')}
-            >
-              <XCircle className="size-3.5" />
-              Annulla
-            </Button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const newCount = orders.filter(o => o.status === 'nuovo').length;
+  const kitchenCount = orders.filter(o => o.status === 'in_cucina').length;
+  const readyCount = orders.filter(o => o.status === 'pronto').length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Gestione Ordini</h2>
-          <p className="text-sm text-muted-foreground mt-1">Monitora e gestisci tutti gli ordini del ristorante</p>
-        </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={openNewOrderDialog}>
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">Nuovo Ordine</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Nuovo Ordine</DialogTitle>
-            </DialogHeader>
-
-            <div className="grid gap-4 py-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium">Nome Cliente</label>
-                  <Input
-                    placeholder="Cliente da Banco"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Telefono</label>
-                  <Input
-                    placeholder="+39 333 1234567"
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Cerca Piatto</label>
-                <div className="relative mt-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Cerca per nome o categoria..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-
-              {/* Menu items list */}
-              <ScrollArea className="h-48 rounded-md border">
-                <div className="p-2 space-y-1">
-                  {filteredMenu.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">Nessun piatto trovato</p>
-                  ) : (
-                    filteredMenu.map((item) => {
-                      const inCart = cart.find((c) => c.menuItem.id === item.id);
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => addToCart(item)}
-                          className="w-full flex items-center justify-between p-2 rounded-md hover:bg-muted transition-colors text-left"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-xl">{item.imageEmoji}</span>
-                            <div>
-                              <p className="text-sm font-medium">{item.name}</p>
-                              <p className="text-xs text-muted-foreground">{item.category}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold">€{item.price.toFixed(2)}</span>
-                            {inCart && (
-                              <Badge className="bg-emerald-500 text-white">x{inCart.quantity}</Badge>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </ScrollArea>
-
-              {/* Cart */}
-              {cart.length > 0 && (
-                <div className="border rounded-md p-3 space-y-2">
-                  <p className="text-sm font-semibold">Carrello</p>
-                  {cart.map((c) => (
-                    <div key={c.menuItem.id} className="flex items-center justify-between text-sm">
-                      <span className="flex items-center gap-1.5">
-                        <span>{c.menuItem.imageEmoji}</span>
-                        <span>{c.menuItem.name}</span>
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => updateCartQuantity(c.menuItem.id, -1)}
-                          className="size-6 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80"
-                        >
-                          <Minus className="size-3" />
-                        </button>
-                        <span className="font-medium w-6 text-center">{c.quantity}</span>
-                        <button
-                          onClick={() => updateCartQuantity(c.menuItem.id, 1)}
-                          className="size-6 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80"
-                        >
-                          <Plus className="size-3" />
-                        </button>
-                        <span className="font-semibold w-16 text-right">€{(c.menuItem.price * c.quantity).toFixed(2)}</span>
-                      </div>
-                    </div>
-                  ))}
-                  <Separator />
-                  <div className="flex justify-between font-bold">
-                    <span>Totale</span>
-                    <span>€{cartTotal.toFixed(2)}</span>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="text-sm font-medium">Note</label>
-                <Input
-                  placeholder="Allergeni, richieste speciali..."
-                  value={orderNotes}
-                  onChange={(e) => setOrderNotes(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-            </div>
-
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">Annulla</Button>
-              </DialogClose>
-              <Button
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={submitOrder}
-                disabled={submitting || cart.length === 0}
-              >
-                {submitting ? 'Creazione...' : 'Crea Ordine'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      <div className="pt-10 md:pt-0">
+        <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+          <ShoppingBag className="size-5 sm:size-6 text-lumina-gold" />
+          Comande Cucina
+        </h2>
+        <p className="text-sm text-lumina-muted mt-0.5">Gestisci ordini e invia comande</p>
       </div>
 
-      {/* Kanban View */}
+      {/* Filtri veloci */}
+      <div className="flex flex-wrap gap-2">
+        {[
+          { id: 'attivi', label: 'Attivi', count: newCount + kitchenCount + readyCount, color: 'bg-amber-500/20 text-amber-300' },
+          { id: 'nuovo', label: 'Nuovi', count: newCount, color: 'bg-amber-500/20 text-amber-300' },
+          { id: 'in_cucina', label: 'In Cucina', count: kitchenCount, color: 'bg-orange-500/20 text-orange-300' },
+          { id: 'pronto', label: 'Pronti', count: readyCount, color: 'bg-emerald-500/20 text-emerald-300' },
+          { id: 'completati', label: 'Completati', count: orders.filter(o => o.status === 'consegnato').length, color: 'bg-gray-500/20 text-gray-400' },
+        ].map(f => (
+          <button key={f.id} onClick={() => setActiveFilter(f.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium border transition-colors ${
+              activeFilter === f.id
+                ? `${f.color} border-current`
+                : 'border-lumina-border text-gray-400 hover:text-white hover:bg-lumina-border/50'
+            }`}>
+            {f.label} ({f.count})
+          </button>
+        ))}
+      </div>
+
+      {/* Ordini */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="space-y-3">
-              <Skeleton className="h-8 w-32 rounded-lg" />
-              {[1, 2].map((j) => (
-                <Skeleton key={j} className="h-40 w-full rounded-xl" />
-              ))}
-            </div>
-          ))}
+        <div className="space-y-3">{[1, 2, 3].map(i => (
+          <div key={i} className="h-32 rounded-xl bg-lumina-card border-lumina-border animate-pulse" />
+        ))}</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12">
+          <UtensilsCrossed className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+          <p className="text-sm text-lumina-muted">Nessun ordine in questa categoria</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {statusPipeline.map((status) => {
-            const config = statusConfig[status];
-            const items = ordersByStatus[status] || [];
+        <div className="space-y-3">
+          {filtered.map(order => {
+            const action = nextStatusAction[order.status];
+            const { food, drinks } = separateItems(order.items);
             return (
-              <div key={status} className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full ${config.borderColor.replace('border-', 'bg-')}`} />
-                  <h3 className={`font-semibold text-sm ${config.color}`}>
-                    {config.label}
-                  </h3>
-                  <Badge variant="secondary" className="text-xs">
-                    {items.length}
-                  </Badge>
-                </div>
-                <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
-                  {items.length === 0 ? (
-                    <div className={`rounded-xl border-2 border-dashed ${config.borderColor} p-6 text-center`}>
-                      <p className="text-xs text-muted-foreground">Nessun ordine</p>
-                    </div>
-                  ) : (
-                    items.map((order) => <OrderCard key={order.id} order={order} />)
-                  )}
-                </div>
-              </div>
+              <Card key={order.id} className="bg-lumina-card border-lumina-border hover:border-lumina-gold/20 transition-colors">
+                <CardContent className="p-3 sm:p-4">
+                  {/* Intestazione ordine */}
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span className="font-bold text-sm sm:text-base text-white">#{order.id.slice(-6)}</span>
+                    <span className="text-sm text-gray-300">{order.customerName}</span>
+                    {order.customerPhone && <span className="text-xs text-lumina-muted">{order.customerPhone}</span>}
+                    <Badge variant="outline" className={`text-[10px] sm:text-xs ml-auto ${statusColors[order.status] || ''}`}>
+                      {statusLabels[order.status] || order.status}
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 mb-3">
+                    {/* CUCINA */}
+                    {food.length > 0 && (
+                      <div className="p-2.5 rounded-lg bg-orange-500/5 border border-orange-500/15">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <Flame className="size-3.5 text-orange-400" />
+                          <span className="text-[11px] font-semibold text-orange-300 uppercase tracking-wider">Cucina</span>
+                        </div>
+                        {food.map((item, i) => {
+                          const name = item.menuItem?.name || item.name || 'Articolo';
+                          return (
+                            <div key={i} className="flex justify-between text-xs sm:text-sm py-0.5">
+                              <span className="text-gray-300">{item.quantity}x {name}</span>
+                              <span className="text-gray-400 ml-2">€{(item.price * item.quantity).toFixed(2)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {/* BEVANDE */}
+                    {drinks.length > 0 && (
+                      <div className="p-2.5 rounded-lg bg-violet-500/5 border border-violet-500/15">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <Wine className="size-3.5 text-violet-400" />
+                          <span className="text-[11px] font-semibold text-violet-300 uppercase tracking-wider">Bevande</span>
+                        </div>
+                        {drinks.map((item, i) => {
+                          const name = item.menuItem?.name || item.name || 'Articolo';
+                          return (
+                            <div key={i} className="flex justify-between text-xs sm:text-sm py-0.5">
+                              <span className="text-gray-300">{item.quantity}x {name}</span>
+                              <span className="text-gray-400 ml-2">€{(item.price * item.quantity).toFixed(2)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Note + Totale */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    {order.notes && (
+                      <span className="text-[11px] text-amber-300/80 italic">📝 {order.notes}</span>
+                    )}
+                    <span className="text-xs text-gray-500">
+                      {new Date(order.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="font-bold text-sm text-white ml-auto">€{order.total.toFixed(2)}</span>
+                  </div>
+
+                  {/* Azioni */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {action && (
+                      <Button
+                        size="sm"
+                        onClick={() => updateStatus(order.id, action.nextStatus)}
+                        disabled={updating === order.id}
+                        className={`${action.color} text-xs h-9 px-3 sm:px-4 rounded-lg font-semibold transition-all active:scale-95`}
+                      >
+                        {updating === order.id ? <Loader2 className="size-3.5 mr-1 animate-spin" /> : <action.icon className="size-3.5 mr-1" />}
+                        {action.label}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => printTicket(order)}
+                      className="text-xs h-9 px-2 text-gray-400 hover:text-white hover:bg-lumina-border/50">
+                      <Printer className="size-3.5 mr-1" /> Stampa
+                    </Button>
+                    {order.status === 'nuovo' && (
+                      <Button size="sm" variant="ghost" onClick={() => updateStatus(order.id, 'annullato')}
+                        className="text-xs h-9 px-2 text-rose-400 hover:bg-rose-400/10 ml-auto">
+                        <X className="size-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             );
           })}
-
-          {/* Annullati column - smaller */}
-          {ordersByStatus['annullato'] && ordersByStatus['annullato'].length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-rose-300" />
-                <h3 className="font-semibold text-sm text-rose-600">Annullati</h3>
-                <Badge variant="secondary" className="text-xs">
-                  {ordersByStatus['annullato'].length}
-                </Badge>
-              </div>
-              <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
-                {ordersByStatus['annullato'].map((order) => (
-                  <OrderCard key={order.id} order={order} />
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
