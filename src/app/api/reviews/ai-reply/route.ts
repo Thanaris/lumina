@@ -52,12 +52,12 @@ export async function POST(request: NextRequest) {
     const systemPrompt = `Sei un assistente AI per un ristorante di cucina siciliana a Catania. Scrivi risposte professionali ed empatiche alle recensioni in italiano. Risposte brevi (2-4 frasi), professionali ma calde. Firma come "Il team della Trattoria del Sole".`;
 
     const reply = await callGroq(systemPrompt, `Scrivi una risposta a questa recensione:
- ${authorContext}
- ${platformContext}
+${authorContext}
+${platformContext}
 Voto: ${rating}/5 stelle.
 Testo: "${reviewText}"
 
- ${toneInstruction}
+${toneInstruction}
 
 Scrivi solo la risposta.`);
 
